@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>近代史纲要刷题 Pro</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- 引入 Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+    <!-- 1. 首页 -->
+    <section id="home-view" class="view-section">
+        <div class="app-icon">📚</div>
+        <h1 class="app-title">近代史纲要</h1>
+        <p class="app-subtitle">精选试题 · 智能判分</p>
+        <div class="mode-selection">
+            <button class="btn btn-primary" onclick="initGame('normal')">正序刷题 (1 → End)</button>
+            <button class="btn btn-secondary" onclick="initGame('random')">无序刷题 (随机)</button>
+        </div>
+    </section>
+
+    <!-- 2. 答题界面 -->
+    <section id="quiz-view" class="view-section hidden card">
+        <header>
+            <div class="header-content" style="width:100%; display:flex; justify-content:space-between; align-items:center;">
+                <span class="progress-indicator" id="progress">Loading...</span>
+                <div class="score-badge">得分 <span id="current-score">0</span></div>
+            </div>
+        </header>
+        <div class="quiz-content">
+            <div id="question-container"></div>
+        </div>
+        <footer class="footer-actions">
+            <button id="submit-btn" class="btn btn-primary" onclick="submitAnswer()">提交答案</button>
+            <button id="next-btn" class="btn btn-secondary hidden" onclick="nextQuestion()">下一题</button>
+        </footer>
+    </section>
+
+    <!-- 3. 结果界面 -->
+    <section id="result-view" class="view-section hidden card">
+        <h2 style="font-size:24px; margin-bottom:8px;">练习完成</h2>
+        <p style="color:var(--text-sub); margin-bottom:32px;">最终成绩</p>
+        <div class="score-circle" id="final-circle">
+            <div class="score-number" id="final-score">0</div>
+        </div>
+        <p style="font-size:14px; color:var(--text-sub); margin-bottom:10px;">点击红色数字回顾错题</p>
+        <div id="wrong-answers-container" class="wrong-list"></div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-outline" onclick="location.reload()">返回首页</button>
+            <button class="btn btn-primary" onclick="restartQuiz()">重新开始</button>
+        </div>
+    </section>
+
+    <!-- 业务逻辑 -->
+    <script src="script.js"></script>
+</body>
+</html>
