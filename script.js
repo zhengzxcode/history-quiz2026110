@@ -1,62 +1,4 @@
-// --- 1. 配置区域 (替换为您自己的 Firebase 配置) ---
-// 如何获取：前往 console.firebase.google.com -> 创建项目 -> 添加 Web 应用 -> 复制配置
-const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "SENDER_ID",
-    appId: "APP_ID"
-};
 
-// --- 2. 初始化 Analytics (隐形追踪) ---
-let db;
-let isAnalyticsEnabled = false;
-
-function initAnalytics() {
-    try {
-        // 检查是否配置了 API Key，如果还是默认文本，则不启动
-        if (firebaseConfig.apiKey === "YOUR_API_KEY") {
-            console.warn("Firebase 未配置，跳过追踪初始化。");
-            return;
-        }
-
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.firestore();
-        isAnalyticsEnabled = true;
-
-        // 识别用户
-        let userId = localStorage.getItem('quiz_user_id');
-        let isNewUser = false;
-        
-        if (!userId) {
-            // 生成新 ID (简单的随机串)
-            userId = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-            localStorage.setItem('quiz_user_id', userId);
-            isNewUser = true;
-        }
-
-        // 记录访问日志
-        const visitData = {
-            userId: userId,
-            visitTime: new Date().toISOString(),
-            isNewUser: isNewUser,
-            userAgent: navigator.userAgent, // 获取设备信息
-            screenSize: `${window.innerWidth}x${window.innerHeight}`
-        };
-
-        // 发送到 Firestore 的 'visits' 集合
-        db.collection('visits').add(visitData)
-            .then(() => console.log("Log saved."))
-            .catch(err => console.error("Log error", err));
-
-    } catch (e) {
-        console.error("Firebase Init Error:", e);
-    }
-}
-
-// 页面加载即启动追踪
-initAnalytics();
 
 
 // --- 3. 刷题核心逻辑 ---
@@ -281,4 +223,5 @@ function restartQuiz() {
 }
 
 // 预加载
+
 fetchQuestions();
