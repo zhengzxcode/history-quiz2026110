@@ -59,6 +59,8 @@ function initAnalytics() {
 
 // 页面加载即启动追踪
 initAnalytics();
+
+
 // --- 3. 刷题核心逻辑 ---
 let rawQuestions = [];
 let questions = [];
@@ -332,8 +334,14 @@ function restartQuiz() {
 }
 
 // 预加载
-
 fetchQuestions();
+// 每次回到首页时，更新错题数量显示
+function updateMistakeCount() {
+    const saved = JSON.parse(localStorage.getItem('quiz_mistakes') || '[]');
+    const countEl = document.getElementById('mistake-count');
+    if(countEl) countEl.innerText = saved.length;
+}
+
 // 修改 restartQuiz，让它返回首页时也刷新数量
 const oldRestart = restartQuiz;
 restartQuiz = function() {
@@ -343,5 +351,4 @@ restartQuiz = function() {
 
 // 页面加载时也刷新一次
 updateMistakeCount();
-
 
