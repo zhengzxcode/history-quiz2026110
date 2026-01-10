@@ -91,15 +91,40 @@ async function fetchQuestions() {
 
 // 初始化游戏
 async function initGame(mode) {
-    if (rawQuestions.length === 0) await fetchQuestions();
+    // 确保数据已加载
+    if (rawQuestions.length === 0) {
+        await fetchQuestions();
+        if (rawQuestions.length === 0) return;
+    }
     
-    let tempQuestions = JSON.parse(JSON.stringify(rawQuestions));
-    
-    if (mode === 'random') {
-        // 洗牌算法
-        for (let i = tempQuestions.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [tempQuestions[i], tempQuestions[j]] = [tempQuestions[j], tempQuestions[i]];
+    let tempQuestions = [];
+
+    // --- 逻辑分支 ---
+    if (mode === 'review') {
+        // 1. 复习模式：只读取 LocalStorage 里的错题 ID
+        const savedMistakes = JSON.parse(localStorage.getItem('quiz_mistakes') || '[]');
+        
+        if (savedMistakes.length === 0) {
+            alert("错题本是空的！快去刷题积累一点吧~");
+            return;
+        }
+
+        // 筛选出对应的题目
+        tempQuestions = rawQuestions.filter(q => savedMistakes.includes(q.id));
+        
+        // 也可以稍微乱序一下，防止背答案
+        tempQuestions.sort(() => Math.random() - 0.5);
+
+    } else {
+        // 2. 正常模式：使用全部题目
+        tempQuestions = JSON.parse(JSON.stringify(rawQuestions));
+        
+        if (mode === 'random') {
+            // 洗牌算法
+            for (let i = tempQuestions.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tempQuestions[i], tempQuestions[j]] = [tempQuestions[j], tempQuestions[i]];
+            }
         }
     }
 
@@ -108,12 +133,14 @@ async function initGame(mode) {
         userAnswer: null
     }));
 
+    // 重置状态
     currentQuestionIndex = 0;
     score = 0;
     wrongAnswers = [];
-    isReviewMode = false;
+    isReviewMode = (mode === 'review'); // 标记当前是否在复习模式
     scoreEl.innerText = 0;
 
+    // 切换界面
     homeView.classList.add('hidden');
     resultView.classList.add('hidden');
     quizView.classList.remove('hidden');
@@ -175,6 +202,7 @@ function submitAnswer() {
     const inputs = container.querySelectorAll('input:checked');
     
     if (inputs.length === 0) {
+        // 抖动提醒
         submitBtn.style.transform = 'translateX(5px)';
         setTimeout(() => submitBtn.style.transform = 'translateX(0)', 100);
         return;
@@ -191,20 +219,43 @@ function submitAnswer() {
         isCorrect = correctSorted === userSorted;
     }
 
+    // --- 错题本逻辑核心 ---
+    let localMistakes = JSON.parse(localStorage.getItem('quiz_mistakes') || '[]');
+
     if (isCorrect) {
         score++;
         scoreEl.innerText = score;
         scoreEl.style.transform = 'scale(1.2)';
         setTimeout(() => scoreEl.style.transform = 'scale(1)', 200);
+
+        // (可选) 做对了是否要从错题本删除？
+        // 如果是复习模式，做对了就移除，代表掌握了
+        if (isReviewMode) {
+            localMistakes = localMistakes.filter(id => id !== q.id);
+            localStorage.setItem('quiz_mistakes', JSON.stringify(localMistakes));
+        }
+
     } else {
         if (!wrongAnswers.includes(q.id)) wrongAnswers.push(q.id);
+        
+        // 做错了 -> 加入错题本 (去重)
+        if (!localMistakes.includes(q.id)) {
+            localMistakes.push(q.id);
+            localStorage.setItem('quiz_mistakes', JSON.stringify(localMistakes));
+        }
     }
+    // -------------------
 
-    // 渲染反馈
+    // 视觉反馈
     const options = container.querySelectorAll('.option-item');
     options.forEach((opt, idx) => {
         const isSelected = userVals.includes(idx);
-        let isActualAnswer = q.type === 'single' ? (idx === q.answer) : q.answer.includes(idx);
+        let isActualAnswer = false;
+        if (q.type === 'single') {
+            isActualAnswer = (idx === q.answer);
+        } else {
+            isActualAnswer = q.answer.includes(idx);
+        }
 
         if (isSelected && isActualAnswer) opt.classList.add('feedback-correct');
         else if (isSelected && !isActualAnswer) opt.classList.add('feedback-wrong');
@@ -283,5 +334,14 @@ function restartQuiz() {
 // 预加载
 
 fetchQuestions();
+// 修改 restartQuiz，让它返回首页时也刷新数量
+const oldRestart = restartQuiz;
+restartQuiz = function() {
+    oldRestart();
+    updateMistakeCount();
+};
+
+// 页面加载时也刷新一次
+updateMistakeCount();
 
 
