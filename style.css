@@ -189,3 +189,12 @@ header {
     background: rgba(255, 59, 48, 0.1); color: var(--error); border-radius: 12px;
     font-weight: 600; cursor: pointer;
 }
+/* ✅【新增】粘贴到文件最底部 */
+.btn-warning {
+    background-color: #FF9500; /* 醒目的橙色 */
+    color: white;
+    margin-top: 10px; /* 和上面按钮拉开点距离 */
+}
+.btn-warning:active {
+    background-color: #E08900;
+}
