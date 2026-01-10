@@ -3,12 +3,12 @@
 // --- 1. 配置区域 (替换为您自己的 Firebase 配置) ---
 // 如何获取：前往 console.firebase.google.com -> 创建项目 -> 添加 Web 应用 -> 复制配置
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "SENDER_ID",
-    appId: "APP_ID"
+    apiKey: "AIzaSyBwfDRnXxg7pouAsAdOXuNFP0BnnDWlK3I",
+  authDomain: "quizapp-c204a.firebaseapp.com",
+  projectId: "quizapp-c204a",
+  storageBucket: "quizapp-c204a.firebasestorage.app",
+  messagingSenderId: "117422520372",
+  appId: "1:117422520372:web:d706372f702539f448f261",
 };
 
 // --- 2. 初始化 Analytics (隐形追踪) ---
@@ -283,4 +283,5 @@ function restartQuiz() {
 // 预加载
 
 fetchQuestions();
+
 
