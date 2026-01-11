@@ -8,10 +8,19 @@ const firebaseConfig = {
     appId: "1:117422520372:web:d706372f702539f448f261",
 };
 
-// --- 2. 初始化 Firebase ---
+// --- 2. 初始化变量 (改为全局变量，防止加载顺序问题) ---
 let db;
 let isAnalyticsEnabled = false;
+let homeView, quizView, resultView, container, progressEl, scoreEl, submitBtn, nextBtn;
 
+let rawQuestions = [];
+let questions = [];
+let currentQuestionIndex = 0;
+let score = 0;
+let wrongAnswers = [];
+let isReviewMode = false;
+
+// --- 3. 初始化 Firebase & 增强追踪 (IP + 设备 + 时间) ---
 try {
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
@@ -19,8 +28,6 @@ try {
 } catch (e) {
     console.error("Firebase Init Error:", e);
 }
-
-// --- 3. 增强追踪功能 (IP + 设备 + 时间) ---
 
 // 获取真实 IP
 async function getClientIP() {
@@ -60,11 +67,11 @@ async function saveVisitRecord() {
     }
 
     if (isAnalyticsEnabled) {
-        // ✨ 数据包含：IP、设备、时间、是否新用户
+        // ✨ 升级版数据：包含 IP、设备、精确时间
         db.collection('user_logs_pro').add({
             ip: ip,
-            deviceSimple: deviceName, // 简单的设备名
-            visitTime: new Date().toLocaleString(), // 详细时间
+            deviceSimple: deviceName, // 简单的设备名 (如 iPhone)
+            visitTime: new Date().toLocaleString(), // 详细时间 (如 2023/10/1 12:00:00)
             isNewUser: isNewUser,
             userId: userId,
             fullAgent: navigator.userAgent // 完整设备信息
@@ -75,22 +82,7 @@ async function saveVisitRecord() {
     }
 }
 
-// --- 4. 刷题核心逻辑 (完美复刻版) ---
-let rawQuestions = [];
-let questions = [];
-let currentQuestionIndex = 0;
-let score = 0;
-let wrongAnswers = [];
-let isReviewMode = false;
-
-const homeView = document.getElementById('home-view');
-const quizView = document.getElementById('quiz-view');
-const resultView = document.getElementById('result-view');
-const container = document.getElementById('question-container');
-const progressEl = document.getElementById('progress');
-const scoreEl = document.getElementById('current-score');
-const submitBtn = document.getElementById('submit-btn');
-const nextBtn = document.getElementById('next-btn');
+// --- 4. 刷题核心逻辑 ---
 
 async function fetchQuestions() {
     try {
@@ -136,9 +128,10 @@ async function initGame(mode) {
     scoreEl.innerText = 0;
     nextBtn.innerText = "下一题";
 
-    homeView.classList.add('hidden');
-    resultView.classList.add('hidden');
-    quizView.classList.remove('hidden');
+    // 确保 DOM 元素存在
+    if(homeView) homeView.classList.add('hidden');
+    if(resultView) resultView.classList.add('hidden');
+    if(quizView) quizView.classList.remove('hidden');
 
     renderQuestion();
 }
@@ -245,13 +238,12 @@ function nextQuestion() {
     renderQuestion();
 }
 
-// ✅ 这里的逻辑已恢复：不论什么模式，只要做完题，都显示漂亮的圆环
 function showResult() {
     quizView.classList.add('hidden');
     resultView.classList.remove('hidden');
     document.getElementById('final-score').innerText = score;
     
-    // 只要有题目，就计算百分比并显示圆环（之前这里加了 !isReviewMode 限制导致变灰）
+    // ✅ 修复：不论什么模式，只要有题目就计算圆环进度（不再显示灰色）
     if (questions.length > 0) {
         const pct = (score / questions.length) * 100;
         document.getElementById('final-circle').style.setProperty('--score-pct', `${pct}%`);
@@ -303,4 +295,28 @@ function restartQuiz() {
     updateMistakeCount();
 }
 
-function updateMistake
+function updateMistakeCount() {
+    const saved = JSON.parse(localStorage.getItem('quiz_mistakes') || '[]');
+    const countEl = document.getElementById('mistake-count');
+    if(countEl) countEl.innerText = saved.length;
+}
+
+// ✅ 核心修复：等待页面加载完毕后再获取元素，防止按钮点击无反应
+window.onload = async function() {
+    // 1. 获取 DOM 元素 (确保不为 null)
+    homeView = document.getElementById('home-view');
+    quizView = document.getElementById('quiz-view');
+    resultView = document.getElementById('result-view');
+    container = document.getElementById('question-container');
+    progressEl = document.getElementById('progress');
+    scoreEl = document.getElementById('current-score');
+    submitBtn = document.getElementById('submit-btn');
+    nextBtn = document.getElementById('next-btn');
+
+    // 2. 启动逻辑
+    await saveVisitRecord(); // 记录访问
+    fetchQuestions();        // 加载题目
+    updateMistakeCount();    // 更新错题数
+};
+
+
