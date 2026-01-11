@@ -1,4 +1,4 @@
-// --- 1. 配置区域 (您的原始配置) ---
+// --- 1. 配置区域 (您的配置) ---
 const firebaseConfig = {
     apiKey: "AIzaSyBwfDRnXxg7pouAsAdOXuNFP0BnnDWlK3I",
     authDomain: "quizapp-c204a.firebaseapp.com",
@@ -8,7 +8,7 @@ const firebaseConfig = {
     appId: "1:117422520372:web:d706372f702539f448f261",
 };
 
-// --- 2. 变量声明 (先声明，防止报错) ---
+// --- 2. 变量声明 (先占位，不获取，防崩) ---
 let db;
 let isAnalyticsEnabled = false;
 let homeView, quizView, resultView, container, progressEl, scoreEl, submitBtn, nextBtn;
@@ -20,7 +20,7 @@ let score = 0;
 let wrongAnswers = [];
 let isReviewMode = false;
 
-// --- 3. 初始化 Firebase & IP 追踪 (增强功能) ---
+// --- 3. 初始化 Firebase & IP 追踪 ---
 try {
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
@@ -35,7 +35,7 @@ async function getClientIP() {
         const response = await fetch('https://api.ipify.org?format=json');
         const data = await response.json();
         return data.ip;
-    } catch (e) { return "Unknown_IP"; }
+    } catch (error) { return "Unknown_IP"; }
 }
 
 // 获取设备名
@@ -50,13 +50,12 @@ function getDeviceName() {
 
 // 记录访问 (存入 user_logs_pro)
 async function saveVisitRecord() {
-    // Session 防刷
-    if (sessionStorage.getItem('session_recorded')) return;
+    if (sessionStorage.getItem('recorded_session')) return; // 防刷
 
     const ip = await getClientIP();
+    
     let userId = localStorage.getItem('quiz_user_id');
     let isNewUser = false;
-    
     if (!userId) {
         userId = 'u_' + Date.now() + '_' + Math.random().toString(36).substr(2);
         localStorage.setItem('quiz_user_id', userId);
@@ -71,28 +70,26 @@ async function saveVisitRecord() {
             isNew: isNewUser,
             uid: userId,
             ua: navigator.userAgent
-        }).catch(err => console.log("Log skipped"));
+        }).catch(e => console.log("Log error"));
         
-        sessionStorage.setItem('session_recorded', 'true');
+        sessionStorage.setItem('recorded_session', 'true');
     }
 }
 
-// --- 4. 核心逻辑 (完全保留您的完美备份) ---
+// --- 4. 刷题核心逻辑 ---
 
 async function fetchQuestions() {
     try {
         const response = await fetch('questions.json');
-        if (!response.ok) throw new Error('Network err');
+        if (!response.ok) throw new Error('Network error');
         rawQuestions = await response.json();
-    } catch (error) {
-        console.error(error);
-    }
+    } catch (error) { console.error(error); }
 }
 
 async function initGame(mode) {
-    // 双重保险：防止 DOM 未加载就点击
+    // 双重保险：防止 DOM 未加载
     if (!homeView) {
-        console.error("DOM Not Ready");
+        console.error("页面未加载完成，请刷新");
         return;
     }
 
@@ -183,11 +180,7 @@ function renderQuestion() {
 function submitAnswer() {
     const q = questions[currentQuestionIndex];
     const inputs = container.querySelectorAll('input:checked');
-    if (inputs.length === 0) {
-        submitBtn.style.transform = 'translateX(5px)';
-        setTimeout(() => submitBtn.style.transform = 'translateX(0)', 100);
-        return;
-    }
+    if (inputs.length === 0) return;
 
     let userVals = Array.from(inputs).map(i => parseInt(i.value));
     let isCorrect = false;
@@ -205,9 +198,6 @@ function submitAnswer() {
     if (isCorrect) {
         score++;
         scoreEl.innerText = score;
-        scoreEl.style.transform = 'scale(1.2)';
-        setTimeout(() => scoreEl.style.transform = 'scale(1)', 200);
-
         if (isReviewMode) {
             localMistakes = localMistakes.filter(id => id !== q.id);
             localStorage.setItem('quiz_mistakes', JSON.stringify(localMistakes));
@@ -230,8 +220,6 @@ function submitAnswer() {
     });
 
     container.querySelectorAll('input').forEach(i => i.disabled = true);
-    container.querySelectorAll('.option-item').forEach(i => i.style.cursor = 'default');
-
     submitBtn.classList.add('hidden');
     nextBtn.classList.remove('hidden');
 }
@@ -250,7 +238,7 @@ function showResult() {
     resultView.classList.remove('hidden');
     document.getElementById('final-score').innerText = score;
     
-    // ✅ 修复点：不管什么模式，都计算并显示圆环（删除了之前的 !isReviewMode 限制）
+    // ✅ 修复：复习模式也要显示圆环
     if (questions.length > 0) {
         const pct = (score / questions.length) * 100;
         document.getElementById('final-circle').style.setProperty('--score-pct', `${pct}%`);
@@ -260,7 +248,7 @@ function showResult() {
     wrongContainer.innerHTML = '';
 
     if (wrongAnswers.length === 0) {
-        const msg = isReviewMode ? "🎉 复习完成！错题已全部掌握。" : "🎉 完美通关！";
+        const msg = isReviewMode ? "🎉 复习完成！已掌握所有题目。" : "🎉 完美通关！";
         wrongContainer.innerHTML = `<p style="color:var(--success); width:100%; font-weight:bold;">${msg}</p>`;
     } else {
         wrongAnswers.sort((a,b) => a-b).forEach(id => {
@@ -308,7 +296,8 @@ function updateMistakeCount() {
     if(countEl) countEl.innerText = saved.length;
 }
 
-// ✅ 核心修复：必须在 window.onload 里获取 DOM，这才是解决“按钮没反应”的钥匙！
+// ✅ 核心修复：必须在 window.onload 里获取元素
+// 这是解决“点击按钮没反应”的唯一钥匙
 window.onload = function() {
     homeView = document.getElementById('home-view');
     quizView = document.getElementById('quiz-view');
@@ -317,11 +306,4 @@ window.onload = function() {
     progressEl = document.getElementById('progress');
     scoreEl = document.getElementById('current-score');
     submitBtn = document.getElementById('submit-btn');
-    nextBtn = document.getElementById('next-btn');
-
-    saveVisitRecord(); // 发送 IP 记录
-    fetchQuestions();  // 加载题库
-    updateMistakeCount(); // 更新错题数
-};
-
-
+    nextBtn
