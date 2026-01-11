@@ -1,4 +1,4 @@
-// --- 1. 配置区域 (您的配置已填好) ---
+// --- 1. 配置区域 (您的配置) ---
 const firebaseConfig = {
     apiKey: "AIzaSyBwfDRnXxg7pouAsAdOXuNFP0BnnDWlK3I",
     authDomain: "quizapp-c204a.firebaseapp.com",
@@ -20,7 +20,7 @@ try {
     console.error("Firebase Init Error:", e);
 }
 
-// --- 3. 高级追踪功能 (新增部分) ---
+// --- 3. 增强追踪功能 (IP + 设备 + 时间) ---
 
 // 获取真实 IP
 async function getClientIP() {
@@ -60,13 +60,14 @@ async function saveVisitRecord() {
     }
 
     if (isAnalyticsEnabled) {
+        // ✨ 数据包含：IP、设备、时间、是否新用户
         db.collection('user_logs_pro').add({
             ip: ip,
             deviceSimple: deviceName, // 简单的设备名
-            visitTime: new Date().toLocaleString(),
+            visitTime: new Date().toLocaleString(), // 详细时间
             isNewUser: isNewUser,
             userId: userId,
-            fullAgent: navigator.userAgent // 保留完整信息备查
+            fullAgent: navigator.userAgent // 完整设备信息
         }).then(() => {
             console.log("详细记录已发送，包含IP");
             sessionStorage.setItem('has_recorded_session', 'true');
@@ -74,7 +75,7 @@ async function saveVisitRecord() {
     }
 }
 
-// --- 4. 刷题核心逻辑 ---
+// --- 4. 刷题核心逻辑 (完美复刻版) ---
 let rawQuestions = [];
 let questions = [];
 let currentQuestionIndex = 0;
@@ -244,12 +245,14 @@ function nextQuestion() {
     renderQuestion();
 }
 
+// ✅ 这里的逻辑已恢复：不论什么模式，只要做完题，都显示漂亮的圆环
 function showResult() {
     quizView.classList.add('hidden');
     resultView.classList.remove('hidden');
     document.getElementById('final-score').innerText = score;
     
-    if (!isReviewMode && questions.length > 0) {
+    // 只要有题目，就计算百分比并显示圆环（之前这里加了 !isReviewMode 限制导致变灰）
+    if (questions.length > 0) {
         const pct = (score / questions.length) * 100;
         document.getElementById('final-circle').style.setProperty('--score-pct', `${pct}%`);
     }
@@ -270,7 +273,6 @@ function showResult() {
         });
     }
 
-    // 记录分数 (Scores)
     if(isAnalyticsEnabled && !isReviewMode) {
          db.collection('scores').add({
              userId: localStorage.getItem('quiz_user_id'),
@@ -301,17 +303,4 @@ function restartQuiz() {
     updateMistakeCount();
 }
 
-function updateMistakeCount() {
-    const saved = JSON.parse(localStorage.getItem('quiz_mistakes') || '[]');
-    const countEl = document.getElementById('mistake-count');
-    if(countEl) countEl.innerText = saved.length;
-}
-
-// 页面加载启动
-window.onload = async function() {
-    await saveVisitRecord(); // 记录访问 (带IP)
-    fetchQuestions();
-    updateMistakeCount();
-};
-
-
+function updateMistake
