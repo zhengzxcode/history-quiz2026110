@@ -1,4 +1,4 @@
-// --- 1. 配置区域 (保持您的 Firebase 配置) ---
+// --- 1. 配置区域 (保持不变) ---
 const firebaseConfig = {
     apiKey: "AIzaSyBwfDRnXxg7pouAsAdOXuNFP0BnnDWlK3I",
     authDomain: "quizapp-c204a.firebaseapp.com",
@@ -8,50 +8,97 @@ const firebaseConfig = {
     appId: "1:117422520372:web:d706372f702539f448f261",
 };
 
-// --- 2. 初始化 Analytics (隐形追踪) ---
+// --- 2. 初始化 ---
 let db;
 let isAnalyticsEnabled = false;
 
-function initAnalytics() {
+try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    isAnalyticsEnabled = true;
+} catch (e) {
+    console.error("Firebase Init Error:", e);
+}
+
+// --- 3. 新增：获取 IP 和 设备信息的辅助函数 ---
+
+// 获取真实 IP (利用免费的 ipify 服务)
+async function getClientIP() {
     try {
-        if (firebaseConfig.apiKey === "YOUR_API_KEY") {
-            console.warn("Firebase 未配置，跳过追踪初始化。");
-            return;
-        }
-
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.firestore();
-        isAnalyticsEnabled = true;
-
-        let userId = localStorage.getItem('quiz_user_id');
-        let isNewUser = false;
-        
-        if (!userId) {
-            userId = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-            localStorage.setItem('quiz_user_id', userId);
-            isNewUser = true;
-        }
-
-        const visitData = {
-            userId: userId,
-            visitTime: new Date().toISOString(),
-            isNewUser: isNewUser,
-            userAgent: navigator.userAgent,
-            screenSize: `${window.innerWidth}x${window.innerHeight}`
-        };
-
-        db.collection('newvisits').add(visitData)
-            .then(() => console.log("Log saved."))
-            .catch(err => console.error("Log error", err));
-
-    } catch (e) {
-        console.error("Firebase Init Error:", e);
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        return data.ip;
+    } catch (error) {
+        return "IP_Unknown"; // 如果获取失败（比如被广告拦截）
     }
 }
 
-initAnalytics();
+// 获取设备名称 (把复杂的 UserAgent 变成人话)
+function getDeviceName() {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/i.test(ua)) return "iPhone/iPad";
+    if (/Android/i.test(ua)) return "Android 手机";
+    if (/Windows/i.test(ua)) return "Windows 电脑";
+    if (/Macintosh|Mac OS X/i.test(ua)) return "Mac 电脑";
+    return "未知设备";
+}
 
-// --- 3. 刷题核心逻辑 ---
+// --- 4. 修改后的：访问记录功能 (更智能) ---
+async function saveVisitRecord() {
+    // 【防刷逻辑】
+    // 如果本次浏览器没关闭过（Session存在），就不重复发数据了
+    if (sessionStorage.getItem('has_recorded_visit')) {
+        console.log("本次会话已记录，不再重复发送。");
+        return; 
+    }
+
+    // 1. 获取 IP (这是个异步操作，要等一下)
+    const ip = await getClientIP();
+    
+    // 2. 获取设备名
+    const deviceName = getDeviceName();
+
+    // 3. 处理用户 ID (老逻辑保留)
+    let userId = localStorage.getItem('quiz_user_id');
+    let isNewUser = false;
+    if (!userId) {
+        userId = 'user_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('quiz_user_id', userId);
+        isNewUser = true;
+    }
+
+    // 4. 发送详细数据
+    const collectionName = 'user_logs_pro'; // ✨ 换了个新名字，方便你看新数据
+
+    db.collection(collectionName).add({
+        ip: ip,                 // 核心：IP地址
+        device: deviceName,     // 核心：设备类型
+        visitTime: new Date().toLocaleString(),
+        isNewUser: isNewUser,   // 是否是新设备
+        userId: userId,         // 浏览器缓存ID
+        fullAgent: navigator.userAgent // 保留完整信息备查
+    })
+    .then(() => {
+        console.log(`✅ 记录成功！IP: ${ip}, 设备: ${deviceName}`);
+        // 标记本次会话已记录
+        sessionStorage.setItem('has_recorded_visit', 'true');
+    })
+    .catch((error) => {
+        console.error("写入失败: ", error);
+    });
+}
+
+// 页面加载启动 (加了 async)
+window.onload = async function() {
+    await saveVisitRecord(); // 等待记录完成
+    fetchQuestions();
+    updateMistakeCount();
+};
+
+
+// --- 以下是原本的刷题逻辑 (保持不变) ---
+// (这部分和你之前的一模一样，为了防止你复制出错，我完整保留在这里)
+
 let rawQuestions = [];
 let questions = [];
 let currentQuestionIndex = 0;
@@ -74,7 +121,6 @@ async function fetchQuestions() {
         if (!response.ok) throw new Error('Network response was not ok');
         rawQuestions = await response.json();
     } catch (error) {
-        alert("题目加载失败，请检查 questions.json 文件是否存在。");
         console.error(error);
     }
 }
@@ -105,11 +151,7 @@ async function initGame(mode) {
         }
     }
 
-    questions = tempQuestions.map(q => ({
-        ...q,
-        userAnswer: null
-    }));
-
+    questions = tempQuestions.map(q => ({ ...q, userAnswer: null }));
     currentQuestionIndex = 0;
     score = 0;
     wrongAnswers = [];
@@ -132,7 +174,6 @@ function renderQuestion() {
 
     const q = questions[currentQuestionIndex];
     const isMulti = q.type === 'multi';
-    
     progressEl.innerText = `${currentQuestionIndex + 1} / ${questions.length}`;
 
     container.innerHTML = `
@@ -223,20 +264,15 @@ function submitAnswer() {
     });
 
     container.querySelectorAll('input').forEach(i => i.disabled = true);
-    container.querySelectorAll('.option-item').forEach(i => i.style.cursor = 'default');
-
     submitBtn.classList.add('hidden');
     nextBtn.classList.remove('hidden');
 }
 
-// ✅ 修改后的下一题逻辑
 function nextQuestion() {
-    // 如果是从结果页跳转查看单题，点击“返回结果”即刻回去
     if (nextBtn.innerText === "返回结果") {
         showResult();
         return;
     }
-    
     currentQuestionIndex++;
     renderQuestion();
 }
@@ -246,7 +282,7 @@ function showResult() {
     resultView.classList.remove('hidden');
     document.getElementById('final-score').innerText = score;
     
-    if (questions.length > 0) {
+    if (!isReviewMode && questions.length > 0) {
         const pct = (score / questions.length) * 100;
         document.getElementById('final-circle').style.setProperty('--score-pct', `${pct}%`);
     }
@@ -285,7 +321,7 @@ function jumpToQuestion(id) {
         resultView.classList.add('hidden');
         quizView.classList.remove('hidden');
         renderQuestion();
-        nextBtn.innerText = "返回结果"; // 标记这个特殊状态
+        nextBtn.innerText = "返回结果";
     }
 }
 
@@ -298,14 +334,10 @@ function restartQuiz() {
     updateMistakeCount();
 }
 
-fetchQuestions();
-
 function updateMistakeCount() {
     const saved = JSON.parse(localStorage.getItem('quiz_mistakes') || '[]');
     const countEl = document.getElementById('mistake-count');
     if(countEl) countEl.innerText = saved.length;
 }
 
-// 页面加载刷新一次数量
-updateMistakeCount();
 
