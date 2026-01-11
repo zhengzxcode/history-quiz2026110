@@ -1,4 +1,4 @@
-// --- 1. 配置区域 (保持不变) ---
+// --- 1. 配置区域 (您的配置已填好) ---
 const firebaseConfig = {
     apiKey: "AIzaSyBwfDRnXxg7pouAsAdOXuNFP0BnnDWlK3I",
     authDomain: "quizapp-c204a.firebaseapp.com",
@@ -8,7 +8,7 @@ const firebaseConfig = {
     appId: "1:117422520372:web:d706372f702539f448f261",
 };
 
-// --- 2. 初始化 ---
+// --- 2. 初始化 Firebase ---
 let db;
 let isAnalyticsEnabled = false;
 
@@ -20,45 +20,37 @@ try {
     console.error("Firebase Init Error:", e);
 }
 
-// --- 3. 新增：获取 IP 和 设备信息的辅助函数 ---
+// --- 3. 高级追踪功能 (新增部分) ---
 
-// 获取真实 IP (利用免费的 ipify 服务)
+// 获取真实 IP
 async function getClientIP() {
     try {
         const response = await fetch('https://api.ipify.org?format=json');
         const data = await response.json();
         return data.ip;
     } catch (error) {
-        return "IP_Unknown"; // 如果获取失败（比如被广告拦截）
+        return "Unknown_IP";
     }
 }
 
-// 获取设备名称 (把复杂的 UserAgent 变成人话)
+// 获取易读的设备名
 function getDeviceName() {
     const ua = navigator.userAgent;
     if (/iPhone|iPad|iPod/i.test(ua)) return "iPhone/iPad";
     if (/Android/i.test(ua)) return "Android 手机";
     if (/Windows/i.test(ua)) return "Windows 电脑";
     if (/Macintosh|Mac OS X/i.test(ua)) return "Mac 电脑";
-    return "未知设备";
+    return "其他设备";
 }
 
-// --- 4. 修改后的：访问记录功能 (更智能) ---
+// 发送详细记录 (存入 user_logs_pro)
 async function saveVisitRecord() {
-    // 【防刷逻辑】
-    // 如果本次浏览器没关闭过（Session存在），就不重复发数据了
-    if (sessionStorage.getItem('has_recorded_visit')) {
-        console.log("本次会话已记录，不再重复发送。");
-        return; 
-    }
+    // Session 防刷：本次浏览器未关闭前不重复记录
+    if (sessionStorage.getItem('has_recorded_session')) return;
 
-    // 1. 获取 IP (这是个异步操作，要等一下)
     const ip = await getClientIP();
-    
-    // 2. 获取设备名
     const deviceName = getDeviceName();
-
-    // 3. 处理用户 ID (老逻辑保留)
+    
     let userId = localStorage.getItem('quiz_user_id');
     let isNewUser = false;
     if (!userId) {
@@ -67,38 +59,22 @@ async function saveVisitRecord() {
         isNewUser = true;
     }
 
-    // 4. 发送详细数据
-    const collectionName = 'user_logs_pro'; // ✨ 换了个新名字，方便你看新数据
-
-    db.collection(collectionName).add({
-        ip: ip,                 // 核心：IP地址
-        device: deviceName,     // 核心：设备类型
-        visitTime: new Date().toLocaleString(),
-        isNewUser: isNewUser,   // 是否是新设备
-        userId: userId,         // 浏览器缓存ID
-        fullAgent: navigator.userAgent // 保留完整信息备查
-    })
-    .then(() => {
-        console.log(`✅ 记录成功！IP: ${ip}, 设备: ${deviceName}`);
-        // 标记本次会话已记录
-        sessionStorage.setItem('has_recorded_visit', 'true');
-    })
-    .catch((error) => {
-        console.error("写入失败: ", error);
-    });
+    if (isAnalyticsEnabled) {
+        db.collection('user_logs_pro').add({
+            ip: ip,
+            deviceSimple: deviceName, // 简单的设备名
+            visitTime: new Date().toLocaleString(),
+            isNewUser: isNewUser,
+            userId: userId,
+            fullAgent: navigator.userAgent // 保留完整信息备查
+        }).then(() => {
+            console.log("详细记录已发送，包含IP");
+            sessionStorage.setItem('has_recorded_session', 'true');
+        }).catch(e => console.error("记录失败", e));
+    }
 }
 
-// 页面加载启动 (加了 async)
-window.onload = async function() {
-    await saveVisitRecord(); // 等待记录完成
-    fetchQuestions();
-    updateMistakeCount();
-};
-
-
-// --- 以下是原本的刷题逻辑 (保持不变) ---
-// (这部分和你之前的一模一样，为了防止你复制出错，我完整保留在这里)
-
+// --- 4. 刷题核心逻辑 ---
 let rawQuestions = [];
 let questions = [];
 let currentQuestionIndex = 0;
@@ -121,7 +97,7 @@ async function fetchQuestions() {
         if (!response.ok) throw new Error('Network response was not ok');
         rawQuestions = await response.json();
     } catch (error) {
-        console.error(error);
+        console.error("Load Error:", error);
     }
 }
 
@@ -215,12 +191,7 @@ function renderQuestion() {
 function submitAnswer() {
     const q = questions[currentQuestionIndex];
     const inputs = container.querySelectorAll('input:checked');
-    
-    if (inputs.length === 0) {
-        submitBtn.style.transform = 'translateX(5px)';
-        setTimeout(() => submitBtn.style.transform = 'translateX(0)', 100);
-        return;
-    }
+    if (inputs.length === 0) return;
 
     let userVals = Array.from(inputs).map(i => parseInt(i.value));
     let isCorrect = false;
@@ -238,9 +209,6 @@ function submitAnswer() {
     if (isCorrect) {
         score++;
         scoreEl.innerText = score;
-        scoreEl.style.transform = 'scale(1.2)';
-        setTimeout(() => scoreEl.style.transform = 'scale(1)', 200);
-
         if (isReviewMode) {
             localMistakes = localMistakes.filter(id => id !== q.id);
             localStorage.setItem('quiz_mistakes', JSON.stringify(localMistakes));
@@ -256,11 +224,10 @@ function submitAnswer() {
     const options = container.querySelectorAll('.option-item');
     options.forEach((opt, idx) => {
         const isSelected = userVals.includes(idx);
-        let isActualAnswer = q.type === 'single' ? (idx === q.answer) : q.answer.includes(idx);
-
-        if (isSelected && isActualAnswer) opt.classList.add('feedback-correct');
-        else if (isSelected && !isActualAnswer) opt.classList.add('feedback-wrong');
-        else if (!isSelected && isActualAnswer) opt.classList.add('feedback-missed');
+        let isActual = q.type === 'single' ? (idx === q.answer) : q.answer.includes(idx);
+        if (isSelected && isActual) opt.classList.add('feedback-correct');
+        else if (isSelected && !isActual) opt.classList.add('feedback-wrong');
+        else if (!isSelected && isActual) opt.classList.add('feedback-missed');
     });
 
     container.querySelectorAll('input').forEach(i => i.disabled = true);
@@ -303,6 +270,7 @@ function showResult() {
         });
     }
 
+    // 记录分数 (Scores)
     if(isAnalyticsEnabled && !isReviewMode) {
          db.collection('scores').add({
              userId: localStorage.getItem('quiz_user_id'),
@@ -317,7 +285,6 @@ function jumpToQuestion(id) {
     const idx = questions.findIndex(q => q.id === id);
     if (idx !== -1) {
         currentQuestionIndex = idx;
-        isReviewMode = true; 
         resultView.classList.add('hidden');
         quizView.classList.remove('hidden');
         renderQuestion();
@@ -339,5 +306,12 @@ function updateMistakeCount() {
     const countEl = document.getElementById('mistake-count');
     if(countEl) countEl.innerText = saved.length;
 }
+
+// 页面加载启动
+window.onload = async function() {
+    await saveVisitRecord(); // 记录访问 (带IP)
+    fetchQuestions();
+    updateMistakeCount();
+};
 
 
