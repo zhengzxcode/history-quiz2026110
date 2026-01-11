@@ -48,7 +48,7 @@ function initAnalytics() {
         };
 
         // 发送到 Firestore 的 'visits' 集合
-        db.collection('visits').add(visitData)
+        db.collection('newvisits').add(visitData)
             .then(() => console.log("Log saved."))
             .catch(err => console.error("Log error", err));
 
@@ -351,4 +351,5 @@ restartQuiz = function() {
 
 // 页面加载时也刷新一次
 updateMistakeCount();
+
 
