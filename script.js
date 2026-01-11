@@ -1,4 +1,4 @@
-// --- 1. 配置区域 (您的配置已保留) ---
+// --- 1. 配置区域 (保持您的 Firebase 配置) ---
 const firebaseConfig = {
     apiKey: "AIzaSyBwfDRnXxg7pouAsAdOXuNFP0BnnDWlK3I",
     authDomain: "quizapp-c204a.firebaseapp.com",
@@ -8,12 +8,51 @@ const firebaseConfig = {
     appId: "1:117422520372:web:d706372f702539f448f261",
 };
 
-// --- 2. 变量初始化 (改为全局变量，防止加载顺序错误) ---
+// --- 2. 初始化 Analytics (隐形追踪) ---
 let db;
 let isAnalyticsEnabled = false;
-// 先声明变量，不要立刻获取，等页面加载完再获取
+
+// 🔴 修复点：将变量声明改为 let，并在页面加载后赋值，防止按钮没反应
 let homeView, quizView, resultView, container, progressEl, scoreEl, submitBtn, nextBtn;
 
+function initAnalytics() {
+    try {
+        if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+            console.warn("Firebase 未配置，跳过追踪初始化。");
+            return;
+        }
+
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        isAnalyticsEnabled = true;
+
+        let userId = localStorage.getItem('quiz_user_id');
+        let isNewUser = false;
+        
+        if (!userId) {
+            userId = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+            localStorage.setItem('quiz_user_id', userId);
+            isNewUser = true;
+        }
+
+        const visitData = {
+            userId: userId,
+            visitTime: new Date().toISOString(),
+            isNewUser: isNewUser,
+            userAgent: navigator.userAgent,
+            screenSize: `${window.innerWidth}x${window.innerHeight}`
+        };
+
+        db.collection('newvisits').add(visitData)
+            .then(() => console.log("Log saved."))
+            .catch(err => console.error("Log error", err));
+
+    } catch (e) {
+        console.error("Firebase Init Error:", e);
+    }
+}
+
+// --- 3. 刷题核心逻辑 ---
 let rawQuestions = [];
 let questions = [];
 let currentQuestionIndex = 0;
@@ -21,87 +60,17 @@ let score = 0;
 let wrongAnswers = [];
 let isReviewMode = false;
 
-// --- 3. 初始化 Firebase & 高级追踪功能 ---
-try {
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.firestore();
-    isAnalyticsEnabled = true;
-} catch (e) {
-    console.error("Firebase Init Error:", e);
-}
-
-// 获取 IP 地址
-async function getClientIP() {
-    try {
-        const response = await fetch('https://api.ipify.org?format=json');
-        const data = await response.json();
-        return data.ip;
-    } catch (error) {
-        return "Unknown_IP";
-    }
-}
-
-// 获取设备名称
-function getDeviceName() {
-    const ua = navigator.userAgent;
-    if (/iPhone|iPad|iPod/i.test(ua)) return "iPhone/iPad";
-    if (/Android/i.test(ua)) return "Android 手机";
-    if (/Windows/i.test(ua)) return "Windows 电脑";
-    if (/Macintosh|Mac OS X/i.test(ua)) return "Mac 电脑";
-    return "其他设备";
-}
-
-// 记录访问 (包含 IP、设备、时间)
-async function saveVisitRecord() {
-    // Session 防刷：浏览器未关闭前不重复记录
-    if (sessionStorage.getItem('has_recorded_session')) return;
-
-    const ip = await getClientIP();
-    const deviceName = getDeviceName();
-    
-    let userId = localStorage.getItem('quiz_user_id');
-    let isNewUser = false;
-    if (!userId) {
-        userId = 'user_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('quiz_user_id', userId);
-        isNewUser = true;
-    }
-
-    if (isAnalyticsEnabled) {
-        // 数据存入 user_logs_pro
-        db.collection('user_logs_pro').add({
-            ip: ip,
-            deviceSimple: deviceName,
-            visitTime: new Date().toLocaleString(),
-            isNewUser: isNewUser,
-            userId: userId,
-            fullAgent: navigator.userAgent
-        }).then(() => {
-            console.log("记录发送成功");
-            sessionStorage.setItem('has_recorded_session', 'true');
-        }).catch(e => console.error("记录失败", e));
-    }
-}
-
-// --- 4. 核心逻辑 ---
-
 async function fetchQuestions() {
     try {
         const response = await fetch('questions.json');
         if (!response.ok) throw new Error('Network response was not ok');
         rawQuestions = await response.json();
     } catch (error) {
-        console.error("Load Error:", error);
+        console.error(error);
     }
 }
 
 async function initGame(mode) {
-    // 再次确保元素已获取（双重保险）
-    if (!homeView) {
-        console.error("DOM尚未加载完成");
-        return;
-    }
-
     if (rawQuestions.length === 0) {
         await fetchQuestions();
         if (rawQuestions.length === 0) return;
@@ -127,7 +96,11 @@ async function initGame(mode) {
         }
     }
 
-    questions = tempQuestions.map(q => ({ ...q, userAnswer: null }));
+    questions = tempQuestions.map(q => ({
+        ...q,
+        userAnswer: null
+    }));
+
     currentQuestionIndex = 0;
     score = 0;
     wrongAnswers = [];
@@ -150,6 +123,7 @@ function renderQuestion() {
 
     const q = questions[currentQuestionIndex];
     const isMulti = q.type === 'multi';
+    
     progressEl.innerText = `${currentQuestionIndex + 1} / ${questions.length}`;
 
     container.innerHTML = `
@@ -191,7 +165,12 @@ function renderQuestion() {
 function submitAnswer() {
     const q = questions[currentQuestionIndex];
     const inputs = container.querySelectorAll('input:checked');
-    if (inputs.length === 0) return;
+    
+    if (inputs.length === 0) {
+        submitBtn.style.transform = 'translateX(5px)';
+        setTimeout(() => submitBtn.style.transform = 'translateX(0)', 100);
+        return;
+    }
 
     let userVals = Array.from(inputs).map(i => parseInt(i.value));
     let isCorrect = false;
@@ -209,6 +188,9 @@ function submitAnswer() {
     if (isCorrect) {
         score++;
         scoreEl.innerText = score;
+        scoreEl.style.transform = 'scale(1.2)';
+        setTimeout(() => scoreEl.style.transform = 'scale(1)', 200);
+
         if (isReviewMode) {
             localMistakes = localMistakes.filter(id => id !== q.id);
             localStorage.setItem('quiz_mistakes', JSON.stringify(localMistakes));
@@ -224,13 +206,16 @@ function submitAnswer() {
     const options = container.querySelectorAll('.option-item');
     options.forEach((opt, idx) => {
         const isSelected = userVals.includes(idx);
-        let isActual = q.type === 'single' ? (idx === q.answer) : q.answer.includes(idx);
-        if (isSelected && isActual) opt.classList.add('feedback-correct');
-        else if (isSelected && !isActual) opt.classList.add('feedback-wrong');
-        else if (!isSelected && isActual) opt.classList.add('feedback-missed');
+        let isActualAnswer = q.type === 'single' ? (idx === q.answer) : q.answer.includes(idx);
+
+        if (isSelected && isActualAnswer) opt.classList.add('feedback-correct');
+        else if (isSelected && !isActualAnswer) opt.classList.add('feedback-wrong');
+        else if (!isSelected && isActualAnswer) opt.classList.add('feedback-missed');
     });
 
     container.querySelectorAll('input').forEach(i => i.disabled = true);
+    container.querySelectorAll('.option-item').forEach(i => i.style.cursor = 'default');
+
     submitBtn.classList.add('hidden');
     nextBtn.classList.remove('hidden');
 }
@@ -240,6 +225,7 @@ function nextQuestion() {
         showResult();
         return;
     }
+    
     currentQuestionIndex++;
     renderQuestion();
 }
@@ -249,7 +235,6 @@ function showResult() {
     resultView.classList.remove('hidden');
     document.getElementById('final-score').innerText = score;
     
-    // ✅ 完美修复：只要有题目，就显示圆环（删除了 !isReviewMode 限制）
     if (questions.length > 0) {
         const pct = (score / questions.length) * 100;
         document.getElementById('final-circle').style.setProperty('--score-pct', `${pct}%`);
@@ -271,7 +256,6 @@ function showResult() {
         });
     }
 
-    // 记录得分
     if(isAnalyticsEnabled && !isReviewMode) {
          db.collection('scores').add({
              userId: localStorage.getItem('quiz_user_id'),
@@ -286,6 +270,7 @@ function jumpToQuestion(id) {
     const idx = questions.findIndex(q => q.id === id);
     if (idx !== -1) {
         currentQuestionIndex = idx;
+        isReviewMode = true; 
         resultView.classList.add('hidden');
         quizView.classList.remove('hidden');
         renderQuestion();
@@ -308,9 +293,8 @@ function updateMistakeCount() {
     if(countEl) countEl.innerText = saved.length;
 }
 
-// ✅ 核心修复：必须在 window.onload 里获取元素，否则点击无反应
-window.onload = async function() {
-    // 1. 在页面加载完毕后，再去抓取 HTML 元素
+// 🔴 修复点：必须在 window.onload 中获取元素并启动，否则点击按钮会报错
+window.onload = function() {
     homeView = document.getElementById('home-view');
     quizView = document.getElementById('quiz-view');
     resultView = document.getElementById('result-view');
@@ -320,8 +304,9 @@ window.onload = async function() {
     submitBtn = document.getElementById('submit-btn');
     nextBtn = document.getElementById('next-btn');
 
-    // 2. 启动各项逻辑
-    await saveVisitRecord(); // 发送 IP 记录
-    fetchQuestions();        // 加载题库
-    updateMistakeCount();    // 显示错题数
+    initAnalytics();
+    fetchQuestions();
+    updateMistakeCount();
 };
+
+
